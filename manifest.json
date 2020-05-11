@@ -22,11 +22,11 @@
     ],
 
     "permissions": [
-        "webRequest", "webRequestBlocking", "https://portal.librus.pl/*", "https://synergia.librus.pl/*"
+        "webRequest", "webRequestBlocking", "https://portal.librus.pl/*", "https://synergia.librus.pl/*", "https://www.librus.pl/*"
     ],
 
     "background": {
-        "scripts": ["background.js"]
+        "scripts": ["browser-polyfill.min.js", "background.js"]
     }
 
 }

@@ -1,23 +1,29 @@
 "use strict";
 
-let url = document.location.toString();
+const isChrome = typeof browser === "undefined" || Object.getPrototypeOf(browser) !== Object.prototype;
+const isFirefox = !isChrome && !!browser;
+const debug = false;
+let url = document.location.toString().split('#')[0].split('?')[0];
 let didInjectCssAlready = false;
 
-console.log("[Librus Enhancer] loading start", {readyState: document.readyState, url});
+if (debug) console.log("[Librus Enhancer] loading start", {readyState: document.readyState, url});
+
+modifyStuff(); // execute immediately
+
+if (document.readyState !== 'complete') // if document is not ready yet, repeat the 
 document.addEventListener('readystatechange', ev => {
-    console.log("[Librus Enhancer] ready?", {readyState: document.readyState, url});
+    if (debug) console.log("[Librus Enhancer] ready?", {readyState: document.readyState, url});
     if (document.readyState !== 'complete') return;
     onDocumentReady();
+    modifyStuff();
 });
-if (document.readyState === 'complete')
-    onDocumentReady(); // execute immediately
+
+if (document.readyState === 'complete') onDocumentReady();
 setTimeout(() => modifyStuff(), 500); // just to make sure and catch the late loaded stuff
 setTimeout(() => modifyStuff(), 1500); // apparently the one above was not enough...
 
 // separated function in case I want to add something to run on document ready once
-function onDocumentReady() {
-    modifyStuff();
-}
+function onDocumentReady() {}
 
 function modifyStuff() {
 
@@ -47,12 +53,13 @@ function modifyStuff() {
     }
 
     if (url === 'https://portal.librus.pl/rodzina/synergia/loguj') {
-        $("#synergiaLogin").next().remove();
+        $("#synergiaLogin").next().remove(); // some ad
     }
 
     if (url === 'https://portal.librus.pl/rodzina') {
         $('.row > div').not('.article__container').has("img[src*='librus_aplikacja_mobilna'").remove(); // inline ad
         $('.row > div').not('.article__container').has("img[src*='aplikacjamobilna'").remove(); // inline ad
+        $('.row > div').not('.article__container').has("img[src='undefined'").remove(); // inline ad
     }
 
     if (url === 'https://portal.librus.pl/') {
@@ -67,7 +74,7 @@ function modifyStuff() {
     if (url === 'https://synergia.librus.pl/uczen/index') {
         let b = $('html body div#page.systema div#body div.container.static.welcome-page.student div.container-background div.content-box h1 b');
         if (b && !!b.length && b.text() === 'ułatwia Twój każdy dzień w szkole!') {
-            b.text('utrudnia Twój każdy dzień w szkole!');
+            b.text('utrudnia Twój każdy dzień w szkole!'); // just a tiny easter egg
         }
     }
 
@@ -88,6 +95,10 @@ function modifyStuff() {
     }
 
     //console.log("modifyStuff end", (+new Date() - date), 'ms'); // takes up to 2 ms
+    if (!window.didShowLibrusEnhancerReadyMessage && document.readyState === 'complete') {
+        window.didShowLibrusEnhancerReadyMessage = true;
+        console.log("[Librus Enhancer] Ready.");
+    }
     
 }
 
@@ -99,12 +110,18 @@ if (url.startsWith('https://synergia.librus.pl/')) {
     let isLoggedOut = div && !!div.length && div.text() === 'Brak dostępu';
 
     if (isLoggedIn && !isLoggedOut) {
-        console.log("[Librus Enhancer] You are logged in!");
-        setInterval(() => refreshPageInBackground(), PAGE_REFRESH_INTERVAL);
-        //setTimeout(() => refreshPageInBackground(), 3000); // testing
+        console.log("[Librus Enhancer] Detected that you are logged in!");
+        // the difference between these two is documented above these functions' definitions
+        if (isFirefox) {
+            setInterval(() => firefox_refreshPageInBackground(), PAGE_REFRESH_INTERVAL);
+            //setTimeout(() => firefox_refreshPageInBackground(), 3000); // testing
+        } else {
+            chrome_refreshPageInBackground_setupIntervalInPageContext();
+        }
     } else {
-        console.log("[Librus Enhancer] You are logged out!");
+        console.log("[Librus Enhancer] Detected that you are logged out!");
         if (isLoggedOut) {
+            // make the login button move us to the login page, and not main page 
             let button = $("input[value='Loguj']");
             if (button && !!button.length) {
                 button.attr('onclick', '');
@@ -119,9 +136,13 @@ if (url.startsWith('https://synergia.librus.pl/')) {
     
 }
 
+// the difference between below functions:
+// firefox one sets interval in content script (in code block above), and uses window.eval to then execute the request in page context
+// chrome one sets both the interval and request in page context (with script tag workaround, as window.eval is not available there)
+
 // prevent session expiration, so we don't get logged out...
-function refreshPageInBackground() {
-    console.log("[Librus Enhancer] Running refreshPageInBackground in page context...");
+function firefox_refreshPageInBackground() { // this function only gets executed in Firefox
+    console.log("[Librus Enhancer] Running firefox_refreshPageInBackground in page context...");
     /*fetch('https://synergia.librus.pl/uczen/index', { // content.fetch crashes tab lol
         //mode: 'same-origin',
         cache: 'no-cache',
@@ -132,6 +153,28 @@ function refreshPageInBackground() {
     let code = `fetch('https://synergia.librus.pl/uczen/index', {
         cache: 'no-cache',
         credentials: 'include'
-    }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));`;
+    }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));`;    
+
     window.eval(code);
+    
+}
+
+// workaround for chrome
+// the modern-age Internet Explorer
+function chrome_refreshPageInBackground_setupIntervalInPageContext() { // this function only gets executed in Chrome, and not in Firefox
+    let fetchcode = `fetch('https://synergia.librus.pl/uczen/index', {
+        cache: 'no-cache',
+        credentials: 'include'
+    }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));`;    
+    let consolecode = 'console.log("[Librus Enhancer] Setting up chrome_refreshPageInBackground_setupIntervalInPageContext interval in page context")';
+    
+    // set interval with the callback both in page context
+    let code = `${consolecode}; setInterval(() => {${fetchcode}}, 3*60*1000);`;
+    //code += `setTimeout(() => {console.log('[Librus Enhancer] Testing: executing background refresh now!');${fetchcode}}, 5000);`; // testing
+    
+    let script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.async = true;
+    script.innerHTML = code;
+    document.head.appendChild(script);
 }
