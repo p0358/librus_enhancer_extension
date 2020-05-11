@@ -1,0 +1,32 @@
+{
+
+    "manifest_version": 2,
+    "name": "Librus Enhancer",
+    "version": "1.0",
+
+    "description": "Sprawia, że Librus jest trochę mniej antyludzki.",
+
+    "icons": {
+        "48": "icons/icon_48.png"
+    },
+
+    "content_scripts": [
+        {
+            "matches": [
+                "https://portal.librus.pl/*",
+                "https://synergia.librus.pl/*",
+                "https://www.librus.pl/*"
+            ],
+            "js": ["jquery.slim.min.js", "contentscript.js"]
+        }
+    ],
+
+    "permissions": [
+        "webRequest", "webRequestBlocking", "https://portal.librus.pl/*", "https://synergia.librus.pl/*"
+    ],
+
+    "background": {
+        "scripts": ["background.js"]
+    }
+
+}
