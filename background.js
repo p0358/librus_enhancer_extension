@@ -17,8 +17,9 @@ browser.webRequest.onBeforeSendHeaders.addListener(appendReferer,
 );
 
 browser.webRequest.onBeforeRequest.addListener(e => {
-    let redirectUrl = "data:application/json;charset=utf-8," + encodeURIComponent('{}'); // lol that triggers CORS (and only in Firefox apparently), but we don't really care, we just need to block the response
-    return {redirectUrl};
+    //let redirectUrl = "data:application/json;charset=utf-8," + encodeURIComponent('{}'); // lol that triggers CORS (and only in Firefox apparently), but we don't really care, we just need to block the response
+    //return {redirectUrl};
+    return {cancel: true};
 },
     {urls: ["https://portal.librus.pl/ad*"]},
     ["blocking"]
