@@ -18,7 +18,8 @@
                 "https://www.librus.pl/*"
             ],
             "js": ["jquery.slim.min.js", "contentscript_common.js", "contentscript.js"],
-            "run_at": "document_end"
+            "run_at": "document_end",
+            "all_frames": true
         },
         {
             "matches": [
