@@ -10,19 +10,23 @@ if (debug) console.log("[Librus Enhancer] loading start", {readyState: document.
 
 modifyStuff(); // execute immediately
 
-if (document.readyState !== 'complete') // if document is not ready yet, repeat the 
+if (document.readyState !== 'complete') // if document is not ready yet
 document.addEventListener('readystatechange', ev => {
     if (debug) console.log("[Librus Enhancer] ready?", {readyState: document.readyState, url});
-    if (document.readyState !== 'complete') return;
-    onDocumentReady();
-    modifyStuff();
+    if (document.readyState === 'interactive') // somehow we weren't in interactive state already? (content script is set to run at document_end)
+        modifyStuff();
+    if (document.readyState === 'complete') {
+        onDocumentReady();
+        modifyStuff();
+    }   
 });
 
 if (document.readyState === 'complete') onDocumentReady();
+
 setTimeout(() => modifyStuff(), 500); // just to make sure and catch the late loaded stuff
 setTimeout(() => modifyStuff(), 1500); // apparently the one above was not enough...
 
-// separated function in case I want to add something to run on document ready once
+// run on document ready once
 function onDocumentReady() {}
 
 function modifyStuff() {
@@ -37,12 +41,12 @@ function modifyStuff() {
         let ad1 = $('.article-list').children()[0];
         if (ad1 && ad1.classList && !ad1.classList.contains('row')) ad1.remove();
         $('.article__container').has('.article__sponsored').remove();
-        //css += '.article__container--small { flex: 1; }'; // don't leave out weird blank spaces
-        css += '.article__container { flex: 1; }'; // don't leave out weird blank spaces
+        //css += '.article__container--small { flex: 1; }'; // don't leave out weird blank spaces from removed elements
+        css += '.article__container { flex: 1; padding: 0 .4rem; }'; // don't leave out weird blank spaces from removed elements
         
     }
 
-    if (url.startsWith('https://portal.librus.pl/rodzina') && url !== 'https://portal.librus.pl/rodzina/synergia/loguj') {
+    if (url.startsWith('https://portal.librus.pl/rodzina') && url !== 'https://portal.librus.pl/rodzina/synergia/loguj' && url !== 'https://portal.librus.pl/szkola/synergia/loguj') {
         
         if (!window.didInsertConvenientLoginButton) {
             let html = '<a class="btn btn-synergia-top btn-navbar" href="https://portal.librus.pl/rodzina/synergia/loguj">ZALOGUJ</a>';
@@ -52,18 +56,22 @@ function modifyStuff() {
         
     }
 
-    if (url === 'https://portal.librus.pl/rodzina/synergia/loguj') {
+    if (url === 'https://portal.librus.pl/rodzina/synergia/loguj' || url === 'https://portal.librus.pl/szkola/synergia/loguj') {
         $("#synergiaLogin").next().remove(); // some ad
     }
 
-    if (url === 'https://portal.librus.pl/rodzina') {
+    if (url === 'https://portal.librus.pl/rodzina' || url === 'https://portal.librus.pl/rodzina/login' || url === 'https://portal.librus.pl/szkola') {
         $('.row > div').not('.article__container').has("img[src*='librus_aplikacja_mobilna'").remove(); // inline ad
         $('.row > div').not('.article__container').has("img[src*='aplikacjamobilna'").remove(); // inline ad
         $('.row > div').not('.article__container').has("img[src='undefined'").remove(); // inline ad
+        $('section#app-download').remove(); // app ad
+    }
+
+    if (url === 'https://portal.librus.pl/' || url === 'https://portal.librus.pl/szkola') {
+        $('.widget-container--small').remove(); // right-side ad
     }
 
     if (url === 'https://portal.librus.pl/') {
-        $('.widget-container--small').remove(); // right-side ad
         if (!window.didInsertMainPageDirectLoginButton) {
             let html = '<a class="btn btn-third btn-navbar" href="https://portal.librus.pl/rodzina/synergia/loguj" style="width: 130px;">ZALOGUJ OD RAZU</a>';
             if ($("a.btn-third:contains('Zaloguj jako')").before(html))
@@ -111,6 +119,7 @@ if (url.startsWith('https://synergia.librus.pl/')) {
 
     if (isLoggedIn && !isLoggedOut) {
         console.log("[Librus Enhancer] Detected that you are logged in!");
+
         // the difference between these two is documented above these functions' definitions
         if (isFirefox) {
             setInterval(() => firefox_refreshPageInBackground(), PAGE_REFRESH_INTERVAL);
@@ -118,6 +127,10 @@ if (url.startsWith('https://synergia.librus.pl/')) {
         } else {
             chrome_refreshPageInBackground_setupIntervalInPageContext();
         }
+
+        $("a[href='/wyloguj']").click(() => storage.set({lastLogin: null}));
+        revealLiblinks();
+
     } else {
         console.log("[Librus Enhancer] Detected that you are logged out!");
         if (isLoggedOut) {
@@ -153,7 +166,7 @@ function firefox_refreshPageInBackground() { // this function only gets executed
     let code = `fetch('https://synergia.librus.pl/uczen/index', {
         cache: 'no-cache',
         credentials: 'include'
-    }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));`;    
+    }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));`;
 
     window.eval(code);
     
@@ -177,4 +190,138 @@ function chrome_refreshPageInBackground_setupIntervalInPageContext() { // this f
     script.async = true;
     script.innerHTML = code;
     document.head.appendChild(script);
+}
+
+//#region IndexedDB
+/** @type {IDBDatabase} */
+let db;
+var indexedDBPromise = new Promise((resolve, reject) => {
+    const DBOpenRequest = window.indexedDB.open("librusData", 1);
+
+    DBOpenRequest.onerror = event => {
+        console.error("[Librus Enhancer] Error opening IndexedDB");
+        resolve();
+    };
+
+    DBOpenRequest.onsuccess = event => {
+        db = DBOpenRequest.result;
+        resolve();
+        console.log("[Librus Enhancer] IndexedDB ready");
+    };
+
+    DBOpenRequest.onupgradeneeded = event => {
+        console.log("SdsadasUCC");
+        /** @type {IDBDatabase} */
+        let db = event.target.result;
+
+        db.onerror = function(event) {
+            console.error("[Librus Enhancer] Error loading database.");
+        };
+
+        if (!db.objectStoreNames.contains("libLinkCache")) {
+            let libLinkObjectStore = db.createObjectStore("libLinkCache", { keyPath: "libLinkUrl" });
+            libLinkObjectStore.createIndex("resolvedUrl", "resolvedUrl", { unique: false });
+        }
+    };
+});
+
+//#endregion IndexedDB
+
+/**
+ * 
+ * @param {string} url
+ * @returns {string | false} resolved actual URL (or false if failed)
+ */
+async function resolveLiblinkFromNetwork(url) {
+    try {
+        let body = await fetch(url, {mode: 'cors'}).then(response => response.text());
+        let regex = /<span style="color: #646464;">(https?:\/\/[^<>]*)<\/span>/g.exec(body);
+        return regex[1] || false;
+    } catch (e) {
+        console.error("[Librus Enhancer] Failed to resolve liblink", {url}, e);
+        return false;
+    }
+}
+
+async function resolveLiblink(url) {
+    await indexedDBPromise;
+    let transaction = db.transaction("libLinkCache", "readonly");
+    let liblinks = transaction.objectStore("libLinkCache");
+    let request = liblinks.get(url);
+    let result;
+    let requestPromise = new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+            console.log("[Librus Enhancer] Resolved libLink from cache", request.result);
+            resolve(request.result);
+        };
+        request.onerror = () => {
+            console.log("[Librus Enhancer] Transaction error", request.error);
+            resolve();
+        };
+    });
+    let cacheResolved = await requestPromise;
+    if (cacheResolved)
+        return cacheResolved.resolvedUrl;
+    //console.log('[Librus Enhancer] Not resolved from cache, will fetch from network', {requestPromise, cacheResolved});
+
+    {
+        let resolvedUrl = await resolveLiblinkFromNetwork(url);
+        if (!resolvedUrl) return false;
+        //console.log('[Librus Enhancer] Resolved URL: ', resolvedUrl);
+
+        let transaction = db.transaction("libLinkCache", "readwrite");
+        let liblinks = transaction.objectStore("libLinkCache");
+        let item = {
+            libLinkUrl: url,
+            resolvedUrl
+        };
+        let request = liblinks.add(item);
+        await new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                console.log("[Librus Enhancer] Link added to the store", request.result);
+                resolve();
+            };
+            request.onerror = () => {
+                console.log("[Librus Enhancer] Transaction error", request.error);
+                resolve();
+            };
+        });
+        return resolvedUrl;
+    }
+}
+
+function revealLiblinks() {
+    $("a[href*='liblink.pl']").each((index, /** @type {HTMLLinkElement} */ element) => {
+        if (element.href.startsWith('https://liblink.pl/') && element.href.length > 'https://liblink.pl/'.length) {
+            setTimeout(() => resolveLiblink(element.href).then(url => {
+                if (!url) return;
+                element.href = url;
+                $(element).text(url);
+                $(element).attr('title', 'Zamieniono liblink na prawdziwy cel');
+            }).catch(r => console.error("[Librus Enhancer] liblink resolve promise error", r)), 1);
+        }
+    });
+}
+
+if (url === 'https://portal.librus.pl//vendor/widget-librus/index.html' || url === 'https://portal.librus.pl/vendor/widget-librus/index.html') {
+    /** @type {MutationCallback} */ const callback = (mutationsList, observer) => {
+        for (let mutation of mutationsList) {
+            if (mutation.type === 'childList') {
+                if (mutation.addedNodes) {
+                    for (let node of mutation.addedNodes) {
+                        if (node.href && node.href.contains("https://liblink.pl")) {
+                            resolveLiblink(node.href).then(url => {
+                                if (!url) return;
+                                node.href = url;
+                                if ($(node).text().contains('liblink.pl')) $(node).text(url);
+                            }).catch(r => console.error("[Librus Enhancer] liblink resolve promise error", r))
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    const observer = new MutationObserver(callback);
+    observer.observe(document.body, {childList: true, subtree: true});
 }

@@ -17,12 +17,23 @@
                 "https://synergia.librus.pl/*",
                 "https://www.librus.pl/*"
             ],
-            "js": ["jquery.slim.min.js", "contentscript.js"]
+            "js": ["jquery.slim.min.js", "contentscript_common.js", "contentscript.js"],
+            "run_at": "document_end"
+        },
+        {
+            "matches": [
+                "https://api.librus.pl/OAuth/Authorization*"
+            ],
+            "css": ["login_iframe.css"],
+            "js": ["jquery.slim.min.js", "browser-polyfill.min.js", "contentscript_common.js", "contentscript_login_iframe.js"],
+            "run_at": "document_idle",
+            "all_frames": true
         }
     ],
 
     "permissions": [
-        "webRequest", "webRequestBlocking", "https://portal.librus.pl/*", "https://synergia.librus.pl/*", "https://www.librus.pl/*"
+        "webRequest", "webRequestBlocking", "storage",
+        "https://portal.librus.pl/*", "https://synergia.librus.pl/*", "https://www.librus.pl/*", "https://api.librus.pl/*", "https://liblink.pl/*"
     ],
 
     "background": {

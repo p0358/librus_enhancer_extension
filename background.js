@@ -12,7 +12,7 @@ function appendReferer(e) {
 let appendReferer_extraInfoSpec = ["blocking", "requestHeaders"];
 if (chrome.webRequest.OnBeforeSendHeadersOptions.hasOwnProperty('EXTRA_HEADERS')) appendReferer_extraInfoSpec.push('extraHeaders'); // Chrome needs this apparently...
 browser.webRequest.onBeforeSendHeaders.addListener(appendReferer,
-    {urls: ["https://portal.librus.pl/rodzina/synergia/loguj"]},
+    {urls: ["https://portal.librus.pl/rodzina/synergia/loguj", "https://portal.librus.pl/szkola/synergia/loguj"]},
     appendReferer_extraInfoSpec
 );
 
