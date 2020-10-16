@@ -309,11 +309,11 @@ if (url === 'https://portal.librus.pl//vendor/widget-librus/index.html' || url =
             if (mutation.type === 'childList') {
                 if (mutation.addedNodes) {
                     for (let node of mutation.addedNodes) {
-                        if (node.href && node.href.contains("https://liblink.pl")) {
+                        if (node.href && node.href.includes("https://liblink.pl")) {
                             resolveLiblink(node.href).then(url => {
                                 if (!url) return;
                                 node.href = url;
-                                if ($(node).text().contains('liblink.pl')) $(node).text(url);
+                                if ($(node).text().includes('liblink.pl')) $(node).text(url);
                             }).catch(r => console.error("[Librus Enhancer] liblink resolve promise error", r))
                         }
                     }
