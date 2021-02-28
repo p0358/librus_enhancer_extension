@@ -49,6 +49,7 @@ function modifyStuff() {
     if (url.startsWith('https://portal.librus.pl/rodzina') && url !== 'https://portal.librus.pl/rodzina/synergia/loguj' && url !== 'https://portal.librus.pl/szkola/synergia/loguj') {
         
         if (!window.didInsertConvenientLoginButton) {
+            $("#shop-button").remove(); // or else the button below won't fit
             let html = '<a class="btn btn-synergia-top btn-navbar" href="https://portal.librus.pl/rodzina/synergia/loguj">ZALOGUJ</a>';
             if ($("a.btn-synergia-top:contains('LIBRUS Synergia')").after(html))
                 window.didInsertConvenientLoginButton = true;
@@ -58,13 +59,22 @@ function modifyStuff() {
 
     if (url === 'https://portal.librus.pl/rodzina/synergia/loguj' || url === 'https://portal.librus.pl/szkola/synergia/loguj') {
         $("#synergiaLogin").next().remove(); // some ad
+        $('section#app-download').remove(); // mobile app ad (only on mobile screens)
     }
 
     if (url === 'https://portal.librus.pl/rodzina' || url === 'https://portal.librus.pl/rodzina/login' || url === 'https://portal.librus.pl/szkola') {
         $('.row > div').not('.article__container').has("img[src*='librus_aplikacja_mobilna'").remove(); // inline ad
         $('.row > div').not('.article__container').has("img[src*='aplikacjamobilna'").remove(); // inline ad
         $('.row > div').not('.article__container').has("img[src='undefined'").remove(); // inline ad
-        $('section#app-download').remove(); // app ad
+
+        // mobile
+        $('.btn.btn-primary.app-download__btn').text('ZALOGUJ OD RAZU');
+        $('.btn.btn-primary.app-download__btn').attr('href', 'https://portal.librus.pl/rodzina/synergia/loguj');
+        $('.btn.btn-primary.app-download__btn').attr('target', '');
+        $('.btn.btn-primary.app-download__btn').css('background-color', '#975b83');
+        //$('.app-download__slogan').text('Przycisk po prawej jest teraz użyteczny :)');
+        $('.app-download__slogan').remove(); // was too big for our button to fit
+        $('.app-download__title').css('font-size', '30px'); // lol
     }
 
     if (url === 'https://portal.librus.pl/' || url === 'https://portal.librus.pl/szkola') {
@@ -73,9 +83,14 @@ function modifyStuff() {
 
     if (url === 'https://portal.librus.pl/') {
         if (!window.didInsertMainPageDirectLoginButton) {
-            let html = '<a class="btn btn-third btn-navbar" href="https://portal.librus.pl/rodzina/synergia/loguj" style="width: 130px;">ZALOGUJ OD RAZU</a>';
-            if ($("a.btn-third:contains('Zaloguj jako')").before(html))
+            let html = '<a class="btn btn-synergia-top btn-navbar" href="https://portal.librus.pl/rodzina/synergia/loguj" style="width: 130px;">ZALOGUJ OD RAZU</a>';
+            if ($("a.btn-transparent--login:contains('Zaloguj jako')").before(html))
                 window.didInsertMainPageDirectLoginButton = true;
+
+            // mobile
+            css += '@media screen and (max-width: 991px) { .btn-synergia-top { height: 20px; margin-top: -7px; padding: 0 !important; } }'; // our button
+            css += '@media screen and (max-width: 767px) { .navbar .container-fluid { width: auto; } }';
+            css += '@media screen and (max-width: 425px) { .navbar__left { display: none !important; } }';
         }
     }
 
@@ -88,8 +103,8 @@ function modifyStuff() {
 
     if (url === 'https://www.librus.pl/') {
         if (!window.didInsertLibrusPageDirectLoginButton) {
-            let html = '<a class="menuLink" href="https://portal.librus.pl/rodzina/synergia/loguj" style="font-weight: bold; text-decoration: underline;">ZALOGUJ OD RAZU</a>';
-            if ($("a.menuLink[href='/kontakt/']").after(html))
+            let html = '<li data-depth="0" class=" menu-item menu-item-type-post_type menu-item-object-page"><a href="https://portal.librus.pl/rodzina/synergia/loguj">ZALOGUJ<br>OD RAZU</a></li>';
+            if ($("li.menu-item a:contains('Kontakt')").parent().after(html))
                 window.didInsertLibrusPageDirectLoginButton = true;
         }
     }
@@ -118,17 +133,20 @@ if (url.startsWith('https://synergia.librus.pl/')) {
     let isLoggedOut = div && !!div.length && div.text() === 'Brak dostępu';
 
     if (isLoggedIn && !isLoggedOut) {
-        console.log("[Librus Enhancer] Detected that you are logged in!");
+        let regex = /jesteś zalogowany jako\:.*(uczeń|rodzic).*/gsi.exec($('#user-section').text());
+        let isParent = regex && regex[1] && regex[1] === 'rodzic';
+
+        console.log("[Librus Enhancer] Detected that you are logged in!" + (isParent ? " (as parent)":""));
 
         // the difference between these two is documented above these functions' definitions
         if (isFirefox) {
-            setInterval(() => firefox_refreshPageInBackground(), PAGE_REFRESH_INTERVAL);
-            //setTimeout(() => firefox_refreshPageInBackground(), 3000); // testing
+            setInterval(() => firefox_refreshPageInBackground(isParent), PAGE_REFRESH_INTERVAL);
+            //setTimeout(() => firefox_refreshPageInBackground(isParent), 3000); // testing
         } else {
-            chrome_refreshPageInBackground_setupIntervalInPageContext();
+            chrome_refreshPageInBackground_setupIntervalInPageContext(isParent);
         }
 
-        $("a[href='/wyloguj']").click(() => storage.set({lastLogin: null}));
+        $("a[href='/wyloguj']").on('click', () => storage.set({lastLogin: null}));
         revealLiblinks();
 
     } else {
@@ -138,9 +156,10 @@ if (url.startsWith('https://synergia.librus.pl/')) {
             let button = $("input[value='Loguj']");
             if (button && !!button.length) {
                 button.attr('onclick', '');
-                button.click(ev => {
+                button.on('click', ev => {
                     ev.preventDefault();
                     ev.stopImmediatePropagation();
+                    // below doesn't support the school version currently, as I have no account to test it with; I assume most users will be family users anyways
                     window.location.replace('https://portal.librus.pl/rodzina/synergia/loguj'); // take us to the login page directly...
                 });
             }
@@ -154,7 +173,7 @@ if (url.startsWith('https://synergia.librus.pl/')) {
 // chrome one sets both the interval and request in page context (with script tag workaround, as window.eval is not available there)
 
 // prevent session expiration, so we don't get logged out...
-function firefox_refreshPageInBackground() { // this function only gets executed in Firefox
+function firefox_refreshPageInBackground(isParent) { // this function only gets executed in Firefox
     console.log("[Librus Enhancer] Running firefox_refreshPageInBackground in page context...");
     /*fetch('https://synergia.librus.pl/uczen/index', { // content.fetch crashes tab lol
         //mode: 'same-origin',
@@ -163,7 +182,7 @@ function firefox_refreshPageInBackground() { // this function only gets executed
     }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));
     */
 
-    let code = `fetch('https://synergia.librus.pl/uczen/index', {
+    let code = `fetch('https://synergia.librus.pl/${isParent?'rodzic':'uczen'}/index', {
         cache: 'no-cache',
         credentials: 'include'
     }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));`;
@@ -174,8 +193,8 @@ function firefox_refreshPageInBackground() { // this function only gets executed
 
 // workaround for chrome
 // the modern-age Internet Explorer
-function chrome_refreshPageInBackground_setupIntervalInPageContext() { // this function only gets executed in Chrome, and not in Firefox
-    let fetchcode = `fetch('https://synergia.librus.pl/uczen/index', {
+function chrome_refreshPageInBackground_setupIntervalInPageContext(isParent) { // this function only gets executed in Chrome, and not in Firefox
+    let fetchcode = `fetch('https://synergia.librus.pl/${isParent?'rodzic':'uczen'}/index', {
         cache: 'no-cache',
         credentials: 'include'
     }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));`;    
@@ -210,7 +229,7 @@ var indexedDBPromise = new Promise((resolve, reject) => {
     };
 
     DBOpenRequest.onupgradeneeded = event => {
-        console.log("SdsadasUCC");
+        console.log("[Librus Enhancer] DBOpenRequest.onupgradeneeded");
         /** @type {IDBDatabase} */
         let db = event.target.result;
 
@@ -233,14 +252,42 @@ var indexedDBPromise = new Promise((resolve, reject) => {
  * @returns {string | false} resolved actual URL (or false if failed)
  */
 async function resolveLiblinkFromNetwork(url) {
-    try {
-        let body = await fetch(url, {mode: 'cors'}).then(response => response.text());
-        let regex = /<span style="color: #646464;">(https?:\/\/[^<>]*)<\/span>/g.exec(body);
-        return regex[1] || false;
-    } catch (e) {
-        console.error("[Librus Enhancer] Failed to resolve liblink", {url}, e);
-        return false;
+    let body;
+    if (isFirefox) {
+        // it just works in Firefox
+        try {
+            body = await fetch(url, {mode: 'cors'}).then(response => response.text());
+            if (!body)
+                console.warn("[Librus Enhancer] Warning: liblink resolve body is empty on contentscript fetch");
+        } catch (e) {
+            console.error("[Librus Enhancer] Failed to resolve liblink from network", {url}, e);
+            return false;
+        }
     }
+    
+    if (!body) {
+        // send a message to background script, for Chromium, but !body check future-proofs it in case Firefox ever decides to pull the same shit and remove CORS requests from content scripts
+        // https://www.chromium.org/Home/chromium-security/extension-content-script-fetches
+        try {
+            let regex = /https?:\/\/(?:[^\/]*\.)?liblink\.pl\/([^\/\?]+)/g.exec(url);
+            /*body = await browser.runtime.sendMessage({
+                contentScriptQuery: 'resolveLiblinkFromNetwork',
+                liblinkID: regex[1]
+            });*/
+            body = await new Promise((resolve, reject) => {
+                chrome.runtime.sendMessage({
+                    contentScriptQuery: 'resolveLiblinkFromNetwork',
+                    liblinkID: regex[1]
+                }, resolve);
+            });
+        } catch (e) {
+            console.error("[Librus Enhancer] Failed to resolve liblink from network using background script", {url}, e);
+            return false;
+        }
+    }
+
+    let regex = /<span style="color: #646464;">(https?:\/\/[^<>]*)<\/span>/g.exec(body);
+    return (regex && regex[1]) || false;
 }
 
 async function resolveLiblink(url) {
@@ -309,7 +356,7 @@ if (url === 'https://portal.librus.pl//vendor/widget-librus/index.html' || url =
             if (mutation.type === 'childList') {
                 if (mutation.addedNodes) {
                     for (let node of mutation.addedNodes) {
-                        if (node.href && node.href.includes("https://liblink.pl")) {
+                        if (node.href && node.href.includes("https://liblink.pl/")) {
                             resolveLiblink(node.href).then(url => {
                                 if (!url) return;
                                 node.href = url;

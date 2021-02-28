@@ -32,3 +32,19 @@ browser.webRequest.onBeforeRequest.addListener(e => {
     {urls: ["https://synergia.librus.pl/loguj", "https://synergia.librus.pl/loguj/przenies*"]},
     ["blocking"]
 );
+
+// redirect to the login page directly, it is the same page as the one we redirect from, except that the main page has some introduction crap instead of login page (you can create account from login page too)
+browser.webRequest.onBeforeRequest.addListener(e => {
+    if (e.originUrl === 'https://portal.librus.pl/rodzina/login') return {}; // don't redirect again if user pressed back button on the login page (doesn't work in Chromium -- their fault)
+    return {redirectUrl: 'https://portal.librus.pl/rodzina/login'};
+},
+    {urls: ["https://portal.librus.pl/rodzina"]},
+    ["blocking"]
+);
+
+browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.contentScriptQuery && request.contentScriptQuery === 'resolveLiblinkFromNetwork') {
+        return fetch('https://liblink.pl/'+request.liblinkID, {mode: 'cors'}).then(response => response.text());
+    }
+    return false;
+});

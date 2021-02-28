@@ -46,5 +46,5 @@ async function decryptPassword(passEncrypted) {
 //#endregion ENCRYPTION
 
 /** @type {browser.storage.StorageArea} */
-//let storage = browser.storage.sync; // production
+//let storage = browser.storage.sync; // production?
 let storage = browser.storage.local; // development
