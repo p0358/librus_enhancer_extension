@@ -1,3 +1,7 @@
+const ACCOUNT_TYPE_PUPIL = 0;
+const ACCOUNT_TYPE_PARENT = 1;
+const ACCOUNT_TYPE_TEACHER = 2;
+
 //#region ENCRYPTION
 
 // better to encrypt with a statically embedded key than to store in storage in plaintext 
@@ -46,5 +50,5 @@ async function decryptPassword(passEncrypted) {
 //#endregion ENCRYPTION
 
 /** @type {browser.storage.StorageArea} */
-//let storage = browser.storage.sync; // production?
-let storage = browser.storage.local; // development
+//let storage = browser.storage.sync;
+let storage = browser.storage.local;

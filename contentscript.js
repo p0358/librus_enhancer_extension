@@ -2,7 +2,7 @@
 
 const isChrome = typeof browser === "undefined" || Object.getPrototypeOf(browser) !== Object.prototype;
 const isFirefox = !isChrome && !!browser;
-const debug = false;
+const debug = true;
 let url = document.location.toString().split('#')[0].split('?')[0];
 let didInjectCssAlready = false;
 
@@ -25,6 +25,7 @@ if (document.readyState === 'complete') onDocumentReady();
 
 setTimeout(() => modifyStuff(), 500); // just to make sure and catch the late loaded stuff
 setTimeout(() => modifyStuff(), 1500); // apparently the one above was not enough...
+setTimeout(() => modifyStuff(), 2500); // apparently the one above was not enough...
 
 // run on document ready once
 function onDocumentReady() {}
@@ -60,6 +61,25 @@ function modifyStuff() {
     if (url === 'https://portal.librus.pl/rodzina/synergia/loguj' || url === 'https://portal.librus.pl/szkola/synergia/loguj') {
         $("#synergiaLogin").next().remove(); // some ad
         $('section#app-download').remove(); // mobile app ad (only on mobile screens)
+
+        // they send: window.parent.postMessage({"command":"open_synergia_window","commandPayload":{"url":"https:\/\/synergia.librus.pl\/uczen\/index"}}, 'https://portal.librus.pl/rodzina');
+        let redirectUrl = window.location.hash && window.location.hash.substr(1);
+        if (redirectUrl && !window.didSetUpOpenSynergiaWindowListenerAlready) {
+            console.log("[Librus Enhancer] Setting up window message event listener to change redirect destination after login (as hash url is provided)");
+            window.addEventListener("message", (event) => {
+                if (debug) console.log("[Librus Enhancer] message event", event);
+                if (event.data && event.data.command && event.data.command === 'open_synergia_window') {
+                    console.log("[Librus Enhancer] intercepted open_synergia_window");
+                    event.stopImmediatePropagation();
+                    event.stopPropagation();
+                    //let url = event.data && event.data.commandPayload && event.data.commandPayload.url;
+                    let url = window.location.hash && window.location.hash.substr(1);
+                    if (!url) url = '/uczen/index';
+                    document.location.assign('https://synergia.librus.pl/' + url.replace(/^\/+/, ''));
+                }
+            }, true);
+            window.didSetUpOpenSynergiaWindowListenerAlready = true;
+        }
     }
 
     if (url === 'https://portal.librus.pl/rodzina' || url === 'https://portal.librus.pl/rodzina/login' || url === 'https://portal.librus.pl/szkola') {
@@ -128,44 +148,143 @@ function modifyStuff() {
 const PAGE_REFRESH_INTERVAL = 3 * 60 * 1000;
 if (url.startsWith('https://synergia.librus.pl/')) {
 
-    let isLoggedIn = !!$('#user-section').length;
+    let isLoggedIn = !!$('#user-section').length; // we are catching only full pages, not popups
     let div = $('#page .container .inside');
     let isLoggedOut = div && !!div.length && div.text() === 'Brak dostępu';
 
     if (isLoggedIn && !isLoggedOut) {
-        let regex = /jesteś zalogowany jako\:.*(uczeń|rodzic).*/gsi.exec($('#user-section').text());
-        let isParent = regex && regex[1] && regex[1] === 'rodzic';
+        let regex = /(jesteś zalogowan[ya\-\(\)\/]+ jako\:).*(uczeń|rodzic).*/gsi.exec($('#user-section').text());
+        
+        let isPupil = regex && regex[1] && regex[2] && regex[2] === 'uczeń';
+        let isParent = regex && regex[1] && regex[2] && regex[2] === 'rodzic';
+        let isTeacher = regex && regex[1] && !isPupil && !isParent;
 
-        console.log("[Librus Enhancer] Detected that you are logged in!" + (isParent ? " (as parent)":""));
+        // fallback detections
+        //if (!isPupil && (!!$("a[href='/przegladaj_oceny/uczen']").length || !!$("a[href='/przegladaj_nb/uczen']").length)) isPupil = true;
+        //if (!isParent && (!!$("a[href='/przegladaj_oceny/rodzic']").length || !!$("a[href='/przegladaj_nb/rodzic']").length)) isParent = true; // both pupil and parent turn out to have "uczen" in these links!!!
+        if (!isTeacher && !!$("a[href='/interfejs_lekcyjny']").length) isTeacher = true;
+
+        let accountType = -1;
+        let accountTypeStr = "unknown";
+        switch (true) {
+            case isPupil && !isParent && !isTeacher: accountType = ACCOUNT_TYPE_PUPIL; accountTypeStr = "pupil"; break;
+            case isParent && !isPupil && !isTeacher: accountType = ACCOUNT_TYPE_PARENT; accountTypeStr = "parent"; break;
+            case isTeacher && !isPupil && !isParent: accountType = ACCOUNT_TYPE_TEACHER; accountTypeStr = "teacher"; break;
+        }
+
+        console.log("[Librus Enhancer] Detected that you are logged in! (as "+accountTypeStr+")");
+
+        $("a[href='/wyloguj']").on('click', () => storage.set({
+            //['lastLogin'+(isTeacher?'School':'')]: null,
+            lastLogin: null,
+            lastLoginSchool: null,
+            pupilNumber: -1
+        }));
+        revealLiblinks();
+
+        if (!regex || !regex[1] || accountType == -1)
+            console.warn("[Librus Enhancer] Could not detect account type!");
 
         // the difference between these two is documented above these functions' definitions
         if (isFirefox) {
-            setInterval(() => firefox_refreshPageInBackground(isParent), PAGE_REFRESH_INTERVAL);
-            //setTimeout(() => firefox_refreshPageInBackground(isParent), 3000); // testing
+            setInterval(() => firefox_refreshPageInBackground(accountType), PAGE_REFRESH_INTERVAL);
+            //setTimeout(() => firefox_refreshPageInBackground(accountType), 3000); // testing
         } else {
-            chrome_refreshPageInBackground_setupIntervalInPageContext(isParent);
+            chrome_refreshPageInBackground_setupIntervalInPageContext(accountType);
         }
 
-        $("a[href='/wyloguj']").on('click', () => storage.set({lastLogin: null}));
-        revealLiblinks();
+        if (accountType == ACCOUNT_TYPE_PUPIL || accountType == ACCOUNT_TYPE_PARENT)
+            grabPupilNumber();
 
+    } else if (isLoggedOut) {
+        console.log("[Librus Enhancer] Detected that you were logged out!");
+        let isFamily = (document.body.innerHTML+'').includes('https:\\/\\/synergia.librus.pl\\/loguj\\/przenies\\/rodzic\\/index');
+        if (isFamily) {
+            let pathname = window.location.pathname;
+            if (pathname !== 'https://synergia.librus.pl/rodzic/index' && pathname !== 'https://synergia.librus.pl/uczen/index')
+                window.location.replace('https://portal.librus.pl/rodzina/synergia/loguj#' + pathname);
+        }
+
+        // make the login button move us to the login page, and not main page 
+        let button = $("input[value='Loguj']");
+        if (button && !!button.length) {
+            button.attr('onclick', '');
+            button.on('click', ev => {
+                ev.preventDefault();
+                ev.stopImmediatePropagation();
+                window.location.replace(`https://portal.librus.pl/${isFamily?'rodzina':'szkola'}/synergia/loguj`); // take us to the login page directly...
+            });
+        }
     } else {
-        console.log("[Librus Enhancer] Detected that you are logged out!");
-        if (isLoggedOut) {
-            // make the login button move us to the login page, and not main page 
-            let button = $("input[value='Loguj']");
-            if (button && !!button.length) {
-                button.attr('onclick', '');
-                button.on('click', ev => {
-                    ev.preventDefault();
-                    ev.stopImmediatePropagation();
-                    // below doesn't support the school version currently, as I have no account to test it with; I assume most users will be family users anyways
-                    window.location.replace('https://portal.librus.pl/rodzina/synergia/loguj'); // take us to the login page directly...
-                });
-            }
-        }
+        console.log("[Librus Enhancer] Detected that you are neither logged in or out (popup or another page)");
     }
     
+}
+
+async function grabPupilNumber() {
+    let data = await storage.get(['pupilNumber']);
+    let pupilNumber = +data.pupilNumber;
+    if (!pupilNumber || pupilNumber == -1) {
+
+        if (debug) console.log('[Librus Enhancer] Pupil number was not in storage, gonna fetch it.');
+        // fetch it
+        let url = 'https://synergia.librus.pl/informacja';
+        let regex = /<th class="big">Nr w dzienniku\s*<\/th>\s*<td>\s*([0-9]+)\s*<\/td>/gs;
+
+        let code = `${debug ? "console.log('[Librus Enhancer] Fetching number in page context...');":""}
+        fetch('${url}', {
+            cache: 'no-cache',
+            credentials: 'include'
+        }).then(response => response.text()).then(text => {
+            let regex = /<th class="big">Nr w dzienniku\\s*<\\/th>\\s*<td>\\s*([0-9]+)\\s*<\\/td>/gs;
+            let data = regex.exec(text);
+            let number = data && data[1] && +data[1];
+            if (!number) return console.warn('[Librus Enhancer] Failed to fetch pupil number!', data);
+            ${debug ? "console.log('[Librus Enhancer] Fetched number in page context:', number);":""}
+            const event = new CustomEvent('PupilNumberEvent', {detail: {number}});
+            window.dispatchEvent(event);
+        });`;
+
+        window.addEventListener('PupilNumberEvent', e => {
+            let number = +(e.detail && e.detail.number);
+            if (!number) return console.warn('[Librus Enhancer] Received invalid pupil number in event listener!', e);
+            storage.set({pupilNumber: number});
+            processPupilNumber(number);
+        });
+
+        if (isFirefox) {
+            window.eval(code);
+        } else {
+            let script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.async = true;
+            script.innerHTML = code;
+            document.head.appendChild(script);
+        }
+
+    } else processPupilNumber(pupilNumber);
+}
+
+function processPupilNumber(number) {
+    console.log("[Librus Enhancer] Determined your number:", number);
+    let currentLuckyNumber = +($('.luckyNumber').text()+'').trim();
+    if (currentLuckyNumber === number) {
+        console.log("[Librus Enhancer] Your number is lucky today!");
+        $('.luckyNumber').css('border', '15px solid red'); // dashed
+        $('.luckyNumber').css('font-size', '20px');
+        $('.luckyNumber').css('background-color', 'lime');
+    }
+}
+
+function getLinkToFetchForBackgroundSessionRefresh(accountType) {
+    let linkToFetch;
+    switch (accountType) {
+        case ACCOUNT_TYPE_PUPIL: linkToFetch = 'https://synergia.librus.pl/uczen/index'; break;
+        case ACCOUNT_TYPE_PARENT: linkToFetch = 'https://synergia.librus.pl/rodzic/index'; break;
+        case ACCOUNT_TYPE_TEACHER: linkToFetch = 'https://synergia.librus.pl/interfejs_lekcyjny'; break;
+        default: linkToFetch = 'https://synergia.librus.pl/ustawienia'; break;
+    }
+    return linkToFetch;
 }
 
 // the difference between below functions:
@@ -173,8 +292,11 @@ if (url.startsWith('https://synergia.librus.pl/')) {
 // chrome one sets both the interval and request in page context (with script tag workaround, as window.eval is not available there)
 
 // prevent session expiration, so we don't get logged out...
-function firefox_refreshPageInBackground(isParent) { // this function only gets executed in Firefox
+function firefox_refreshPageInBackground(accountType) { // this function only gets executed in Firefox
     console.log("[Librus Enhancer] Running firefox_refreshPageInBackground in page context...");
+
+    let linkToFetch = getLinkToFetchForBackgroundSessionRefresh(accountType);
+
     /*fetch('https://synergia.librus.pl/uczen/index', { // content.fetch crashes tab lol
         //mode: 'same-origin',
         cache: 'no-cache',
@@ -182,7 +304,7 @@ function firefox_refreshPageInBackground(isParent) { // this function only gets 
     }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));
     */
 
-    let code = `fetch('https://synergia.librus.pl/${isParent?'rodzic':'uczen'}/index', {
+    let code = `fetch('${linkToFetch}', {
         cache: 'no-cache',
         credentials: 'include'
     }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));`;
@@ -193,8 +315,11 @@ function firefox_refreshPageInBackground(isParent) { // this function only gets 
 
 // workaround for chrome
 // the modern-age Internet Explorer
-function chrome_refreshPageInBackground_setupIntervalInPageContext(isParent) { // this function only gets executed in Chrome, and not in Firefox
-    let fetchcode = `fetch('https://synergia.librus.pl/${isParent?'rodzic':'uczen'}/index', {
+function chrome_refreshPageInBackground_setupIntervalInPageContext(accountType) { // this function only gets executed in Chrome, and not in Firefox
+    
+    let linkToFetch = getLinkToFetchForBackgroundSessionRefresh(accountType);
+    
+    let fetchcode = `fetch('${linkToFetch}', {
         cache: 'no-cache',
         credentials: 'include'
     }).then(response => console.log("[Librus Enhancer] Refreshed page in background to preserve the session (response status: " + response.status + ", length: " + response.headers.get("content-length") + ")"));`;    

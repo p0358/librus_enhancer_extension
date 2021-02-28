@@ -2,7 +2,7 @@
 
     "manifest_version": 2,
     "name": "Librus Enhancer",
-    "version": "1.2.1",
+    "version": "1.2.2",
 
     "description": "Sprawia, że Librus jest trochę mniej antyludzki.",
 
@@ -17,7 +17,7 @@
                 "https://synergia.librus.pl/*",
                 "https://www.librus.pl/*"
             ],
-            "js": ["jquery.slim.min.js", "contentscript_common.js", "contentscript.js"],
+            "js": ["jquery.slim.min.js", "browser-polyfill.min.js", "contentscript_common.js", "contentscript.js"],
             "run_at": "document_end",
             "all_frames": true
         },

@@ -12,7 +12,10 @@ function appendReferer(e) {
 let appendReferer_extraInfoSpec = ["blocking", "requestHeaders"];
 if (chrome.webRequest.OnBeforeSendHeadersOptions.hasOwnProperty('EXTRA_HEADERS')) appendReferer_extraInfoSpec.push('extraHeaders'); // Chrome needs this apparently...
 browser.webRequest.onBeforeSendHeaders.addListener(appendReferer,
-    {urls: ["https://portal.librus.pl/rodzina/synergia/loguj", "https://portal.librus.pl/szkola/synergia/loguj"]},
+    {urls: [
+        "https://portal.librus.pl/rodzina/synergia/loguj", "https://portal.librus.pl/szkola/synergia/loguj",
+        "https://portal.librus.pl/rodzina/synergia/loguj#*", "https://portal.librus.pl/szkola/synergia/loguj#*"
+    ]},
     appendReferer_extraInfoSpec
 );
 
@@ -27,7 +30,22 @@ browser.webRequest.onBeforeRequest.addListener(e => {
 
 // this login link would redirect user to the main page, so catch it and redirect directly to the actual login page instead
 browser.webRequest.onBeforeRequest.addListener(e => {
-    return {redirectUrl: 'https://portal.librus.pl/rodzina/synergia/loguj'};
+    let appendee = '';
+    let moveToUri = '';
+    if (e.url === 'https://synergia.librus.pl/loguj' && e.originUrl && e.originUrl.startsWith('https://synergia.librus.pl/')) {
+        // this will only work in Firefox
+        moveToUri = e.originUrl.replace('https://synergia.librus.pl', '');
+    }
+    else if (e.url && e.url.startsWith('https://synergia.librus.pl/loguj/przenies/')) {
+        moveToUri = e.url.replace('https://synergia.librus.pl/loguj/przenies', '');
+    }
+    moveToUri = moveToUri.replace(/\\\//g, '/');
+    if (moveToUri
+        && moveToUri !== '/rodzic/index' && moveToUri !== '/uczen/index' // we don't care about main page redirect, especially that mixing up "rodzic" and "uczen" would log us out again
+        && moveToUri !== '/loguj' && !moveToUri.startsWith('/loguj')
+    ) 
+        appendee = '#' + moveToUri;
+    return {redirectUrl: 'https://portal.librus.pl/rodzina/synergia/loguj' + appendee};
 },
     {urls: ["https://synergia.librus.pl/loguj", "https://synergia.librus.pl/loguj/przenies*"]},
     ["blocking"]

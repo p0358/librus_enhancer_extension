@@ -32,7 +32,7 @@ let loadingSavedLoginsPromise = (async () => {
 
         $("#Login").val(savedLogin.login);
         $("#Pass").val(await decryptPassword(savedLogin.passEncrypted));
-        $("#LoginBtn").click();
+        $("#LoginBtn").trigger('click');
     }
 })();*/
 
@@ -49,15 +49,15 @@ function insertSavedLoginsButtons() {
 
         let loginPart = $('<div class="loginPart">');
         loginPart.text(savedLogin.login);
-        loginPart.click(async () => {
+        loginPart.on('click', async () => {
             $("#Login").val(savedLogin.login);
             $("#Pass").val(await decryptPassword(savedLogin.passEncrypted));
-            $("#LoginBtn").click();
+            $("#LoginBtn").trigger('click');
         });
 
         let deletePart = $('<div class="deletePart">');
         deletePart.text('×');
-        deletePart.click(async () => {
+        deletePart.on('click', async () => {
             savedLogins = savedLogins.filter(sl => sl !== savedLogin);
             await storage.set({savedLogins});
             insertSavedLoginsButtons();
@@ -71,7 +71,7 @@ function insertSavedLoginsButtons() {
     $('.LoginBox').prepend(container);
 }
 
-$("#LoginBtn").click(async (ev) => {
+$("#LoginBtn").on('click', async (ev) => {
     let remember = $("input#remember").is(':checked'); // credentials will only be saved in storage if user has explicitly pressed the checkbox to "remember for quick login"
     
     let login = $("#Login").val();
@@ -86,7 +86,7 @@ $("#LoginBtn").click(async (ev) => {
         await loadingSavedLoginsPromise;
 
         // remove users that match login, but don't match the password, if user is updating one right now
-        savedLogins = savedLogins.filter(savedLogin => savedLogin.login === login && savedLogin.passEncrypted !== passEncrypted);
+        savedLogins = savedLogins.filter(savedLogin => !(savedLogin.login === login && savedLogin.passEncrypted !== passEncrypted));
 
         // if the entry doesn't exist on our list
         if (!savedLogins.some(savedLogin => savedLogin.login === login && savedLogin.passEncrypted === passEncrypted)) {
@@ -96,11 +96,14 @@ $("#LoginBtn").click(async (ev) => {
     }
 
     // if the user is saved, we will save their name for auto re-login, in case their session expired despite having this addon (interval was throttled or user had disconnected from the internet)
+    // currently not implemented
     // that feature will not affect manual sign-out
     if (login && pass && savedLogins.some(savedLogin => savedLogin.login === login && savedLogin.passEncrypted === passEncrypted)) {
-        storage.set({lastLogin: login});
+        storage.set({['lastLogin'+(isSchool?'School':'')]: login});
     }
+
 });
 
 $("input#remember").parent().remove(); // if we're hot-reloading the script
 $("#passwordRow").append(rememberLoginCode);
+storage.set({'pupilNumber': -1});
